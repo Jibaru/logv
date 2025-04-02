@@ -2,7 +2,6 @@ module github.com/jibaru/logv
 
 go 1.23.1
 
-toolchain go1.24.0
 
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
