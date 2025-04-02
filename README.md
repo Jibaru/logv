@@ -24,7 +24,7 @@
 To install **logv**, ensure you have [Go installed](https://golang.org/doc/install) and then run:
 
 ```bash
-go install github.com/Jibaru/logv
+go install github.com/Jibaru/logv@latest
 ```
 
 This command downloads the source code, compiles the executable, and installs it into your `$GOPATH/bin`. Make sure that your Go bin directory is included in your system's PATH to execute **logv** from anywhere.
