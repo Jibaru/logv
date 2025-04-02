@@ -76,6 +76,7 @@ func main() {
 
 	// Clear button to clear the search input.
 	clearButton := tview.NewButton("Clear")
+	clearButton.SetBackgroundColorActivated(tcell.ColorDarkGrey)
 	clearButton.SetSelectedFunc(func() {
 		searchInput.SetText("")
 		updateList("")
@@ -83,7 +84,7 @@ func main() {
 
 	// Top container grouping searchInput and clearButton.
 	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	searchFlex.AddItem(searchInput, 3, 0, true)
+	searchFlex.AddItem(searchInput, 2, 0, true)
 	searchFlex.AddItem(clearButton, 1, 0, false)
 
 	// Main Flex containing the status bar, search area, and log list.
