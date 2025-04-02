@@ -2,17 +2,16 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"log"
 	"os"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jibaru/logv/json"
 )
 
 func main() {
@@ -32,6 +31,7 @@ func main() {
 
 	list := tview.NewList()
 	{
+		list.SetSelectedBackgroundColor(tcell.Color52)
 		list.ShowSecondaryText(false).
 			SetBorder(true).
 			SetTitle("Logs (Select a line to expand, 'q' to quit)")
@@ -61,7 +61,13 @@ func main() {
 		list.Clear()
 		for _, line := range logLines {
 			if strings.Contains(line, filter) {
-				list.AddItem(line, "", 0, nil)
+				var highlightedLine string
+				if json.IsValid(line) {
+					highlightedLine = json.Highlight(line)
+				} else {
+					highlightedLine = line
+				}
+				list.AddItem(highlightedLine, "", 0, nil)
 			}
 		}
 	}
@@ -74,10 +80,11 @@ func main() {
 	// Show an expanded view of the selected log line with JSON formatting and highlighting.
 	list.SetSelectedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
 		display := mainText
-		if pretty, err := prettyJSON(mainText); err == nil {
-			display = highlightJSON(pretty)
+		if pretty, err := json.Pretty(mainText); err == nil {
+			display = json.Highlight(pretty)
 		}
 		modal := tview.NewModal().
+			SetBackgroundColor(tcell.Color16).
 			SetText(display).
 			AddButtons([]string{"Close"}).
 			SetDoneFunc(func(buttonIndex int, buttonLabel string) {
@@ -96,8 +103,14 @@ func main() {
 			linesMutex.Unlock()
 			currentFilter := searchInput.GetText()
 			if strings.Contains(line, currentFilter) {
+				var highlightedLine string
+				if json.IsValid(line) {
+					highlightedLine = json.Highlight(line)
+				} else {
+					highlightedLine = line
+				}
 				app.QueueUpdateDraw(func() {
-					list.AddItem(line, "", 0, nil)
+					list.AddItem(highlightedLine, "", 0, nil)
 				})
 			}
 		}
@@ -127,28 +140,4 @@ func getTTY() (*os.File, error) {
 		return os.Open("CONIN$")
 	}
 	return os.Open("/dev/tty")
-}
-
-// prettyJSON formats a JSON string with proper indentation.
-// It returns an error if the input is not valid JSON.
-func prettyJSON(input string) (string, error) {
-	var buf bytes.Buffer
-	if err := json.Indent(&buf, []byte(input), "", "  "); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
-// highlightJSON applies basic syntax highlighting to a formatted JSON string.
-// It highlights keys in yellow and string values in green.
-func highlightJSON(input string) string {
-	// Highlight keys: e.g. "key": becomes [yellow]"key"[white]:
-	keyRegex := regexp.MustCompile(`"([^"]+)":`)
-	output := keyRegex.ReplaceAllString(input, `[yellow]"$1"[white]:`)
-
-	// Highlight string values: e.g. : "value" becomes : [green]"value"[white]
-	stringValRegex := regexp.MustCompile(`: "([^"]+)"`)
-	output = stringValRegex.ReplaceAllString(output, `: [green]"$1"[white]`)
-
-	return output
 }
