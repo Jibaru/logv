@@ -80,17 +80,33 @@ func main() {
 	// Show an expanded view of the selected log line with JSON formatting and highlighting.
 	list.SetSelectedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
 		display := mainText
-		if pretty, err := json.Pretty(mainText); err == nil {
-			display = json.Highlight(pretty)
-		}
-		modal := tview.NewModal().
-			SetBackgroundColor(tcell.Color16).
-			SetText(display).
-			AddButtons([]string{"Close"}).
-			SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-				app.SetRoot(flex, true).SetFocus(list)
-			})
-		app.SetRoot(modal, true).SetFocus(modal)
+
+		textView := tview.NewTextView()
+		textView.SetText(display)
+		textView.SetBackgroundColor(tcell.Color16)
+		textView.SetBorder(true)
+		textView.SetTitle("Log Details")
+		textView.SetDynamicColors(true)
+		textView.SetScrollable(true)
+		textView.SetWordWrap(true)
+
+		closeButton := tview.NewButton("Close").SetSelectedFunc(func() {
+			app.SetRoot(flex, true).SetFocus(list)
+		})
+
+		modalContent := tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(textView, 0, 1, false).
+			AddItem(closeButton, 1, 0, false)
+
+		modal := tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(modalContent, 0, 1, true).
+				AddItem(nil, 0, 1, false), 0, 1, true).
+			AddItem(nil, 0, 1, false)
+
+		app.SetRoot(modal, true).SetFocus(closeButton)
 	})
 
 	// Read log lines asynchronously.
