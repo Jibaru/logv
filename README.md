@@ -1,4 +1,12 @@
-# logv
+<div align="center">
+    <img src="./images/icon.png" width="60"/>
+    <h1 style="font-family: 'Yu Gothic'">logv</h1>
+    <p style="font-style: italic">CLI logs visualizer</p>
+</div>
+
+<div>
+    <img src="./images/01.png"/>
+</div>
 
 **logv** is an interactive log viewer written in Go that enhances your logging experience by providing real-time filtering, JSON formatting, and syntax highlighting. It reads log lines from standard input, allowing you to pipe logs into the application, and then displays them in an intuitive user interface. This tool is ideal for developers who need to monitor and debug logs efficiently in local environment.
 
