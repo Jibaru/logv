@@ -47,6 +47,12 @@ Suppose you have a Python script, `generate_logs.py`, that continuously generate
 python generate_logs.py | logv.exe
 ```
 
+In case the `python generate_logs.py` output its data in stdin and stderr, you can use:
+
+```bash
+python generate_logs.py 2>&1 | logv.exe
+```
+
 In this example:
 
 - `python generate_logs.py` is a hypothetical script that produces log output.
