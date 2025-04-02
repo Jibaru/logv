@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"log"
 	"os"
 	"runtime"
 	"strings"
@@ -15,13 +14,14 @@ import (
 )
 
 func main() {
-	// logsPipe contains the log input (typically piped via stdin).
+	// logsPipe contains the log input from stdin.
 	logsPipe := os.Stdin
 
 	// Open the terminal device for interactive input.
 	tty, err := getTTY()
 	if err != nil {
-		log.Fatalf("Error opening terminal device: %v", err)
+		// If we cannot open the tty, fallback to printing to stderr.
+		os.Exit(1)
 	}
 	// Reassign os.Stdin for interactive UI input.
 	os.Stdin = tty
@@ -30,29 +30,20 @@ func main() {
 	app.EnableMouse(true)
 
 	list := tview.NewList()
-	{
-		list.SetSelectedBackgroundColor(tcell.Color52)
-		list.ShowSecondaryText(false).
-			SetBorder(true).
-			SetTitle("Logs (Select a line to expand, 'q' to quit)")
-	}
+	list.SetSelectedBackgroundColor(tcell.Color52)
+	list.ShowSecondaryText(false)
+	list.SetBorder(true)
+	list.SetTitle("Logs (Select a line to expand, 'q' to quit)")
 
-	searchInput := tview.NewInputField().
-		SetLabel("Search: ").
-		SetFieldWidth(30).
-		SetDoneFunc(func(key tcell.Key) {
-			app.SetFocus(list)
-		})
+	// Create a status bar (TextView) to display error messages.
+	statusBar := tview.NewTextView()
+	statusBar.SetText("") // initially empty
+	statusBar.SetDynamicColors(true)
+	statusBar.SetTextAlign(tview.AlignLeft)
 
-	// Arrange the search input and log list vertically.
-	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(searchInput, 3, 0, true).
-		AddItem(list, 0, 1, false)
-
-	var (
-		logLines   []string
-		linesMutex sync.Mutex
-	)
+	// Global variables for log lines.
+	var logLines []string
+	var linesMutex sync.Mutex
 
 	// updateList refreshes the displayed log list with entries that contain the filter text.
 	updateList := func(filter string) {
@@ -72,12 +63,36 @@ func main() {
 		}
 	}
 
-	// Update the log list when the search input changes.
+	// Search input field.
+	searchInput := tview.NewInputField()
+	searchInput.SetLabel("Search: ")
+	searchInput.SetFieldWidth(0) // 0 to take the full available width
+	searchInput.SetDoneFunc(func(key tcell.Key) {
+		app.SetFocus(list)
+	})
 	searchInput.SetChangedFunc(func(text string) {
 		updateList(text)
 	})
 
-	// Show an expanded view of the selected log line with JSON formatting and highlighting.
+	// Clear button to clear the search input.
+	clearButton := tview.NewButton("Clear")
+	clearButton.SetSelectedFunc(func() {
+		searchInput.SetText("")
+		updateList("")
+	})
+
+	// Top container grouping searchInput and clearButton.
+	searchFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	searchFlex.AddItem(searchInput, 3, 0, true)
+	searchFlex.AddItem(clearButton, 1, 0, false)
+
+	// Main Flex containing the status bar, search area, and log list.
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex.AddItem(statusBar, 1, 0, false) // status bar on top (1 row)
+	flex.AddItem(searchFlex, 4, 0, true)
+	flex.AddItem(list, 0, 1, false)
+
+	// When a list item is selected, display an expanded modal with details.
 	list.SetSelectedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
 		display := mainText
 
@@ -90,28 +105,31 @@ func main() {
 		textView.SetScrollable(true)
 		textView.SetWordWrap(true)
 
-		closeButton := tview.NewButton("Close").SetSelectedFunc(func() {
+		closeButton := tview.NewButton("Close")
+		closeButton.SetSelectedFunc(func() {
 			app.SetRoot(flex, true).SetFocus(list)
 		})
 
-		modalContent := tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(textView, 0, 1, false).
-			AddItem(closeButton, 1, 0, false)
+		modalContent := tview.NewFlex().SetDirection(tview.FlexRow)
+		modalContent.AddItem(textView, 0, 1, false)
+		modalContent.AddItem(closeButton, 3, 0, false)
 
-		modal := tview.NewFlex().
-			AddItem(nil, 0, 1, false).
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(nil, 0, 1, false).
-				AddItem(modalContent, 0, 1, true).
-				AddItem(nil, 0, 1, false), 0, 1, true).
-			AddItem(nil, 0, 1, false)
+		// Larger modal: set fixed height (30 rows) for the modal content.
+		modal := tview.NewFlex()
+		modal.AddItem(nil, 0, 1, false)
+		innerFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+		innerFlex.AddItem(nil, 0, 1, false)
+		innerFlex.AddItem(modalContent, 30, 1, true)
+		innerFlex.AddItem(nil, 0, 1, false)
+		modal.AddItem(innerFlex, 0, 1, true)
+		modal.AddItem(nil, 0, 1, false)
 
 		app.SetRoot(modal, true).SetFocus(closeButton)
 	})
 
-	// Read log lines asynchronously.
-	go func() {
-		scanner := bufio.NewScanner(logsPipe)
+	// readPipe reads lines from the provided pipe and adds them to the log list.
+	readPipe := func(pipe *os.File) {
+		scanner := bufio.NewScanner(pipe)
 		for scanner.Scan() {
 			line := scanner.Text()
 			linesMutex.Lock()
@@ -130,10 +148,17 @@ func main() {
 				})
 			}
 		}
+		// Instead of logging errors, update the status bar if an error occurs.
 		if err := scanner.Err(); err != nil {
-			log.Printf("Error reading logs: %v", err)
+			app.QueueUpdateDraw(func() {
+				statusBar.SetText("[red]Error reading logs: " + err.Error() + "[-]")
+			})
 		}
-	}()
+	}
+
+	// Launch goroutines to read from both stdin and stderr.
+	go readPipe(logsPipe)
+	go readPipe(os.Stderr)
 
 	// Capture 'q' or 'Q' key events to quit the application.
 	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -145,7 +170,8 @@ func main() {
 	})
 
 	if err := app.SetRoot(flex, true).Run(); err != nil {
-		log.Fatalf("Error running application: %v", err)
+		// If the application cannot run, print the error.
+		os.Exit(1)
 	}
 }
 
