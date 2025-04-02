@@ -20,7 +20,7 @@ func main() {
 	// Open the terminal device for interactive input.
 	tty, err := getTTY()
 	if err != nil {
-		// If we cannot open the tty, fallback to printing to stderr.
+		// Exit if we cannot open the tty.
 		os.Exit(1)
 	}
 	// Reassign os.Stdin for interactive UI input.
@@ -37,7 +37,7 @@ func main() {
 
 	// Create a status bar (TextView) to display error messages.
 	statusBar := tview.NewTextView()
-	statusBar.SetText("") // initially empty
+	statusBar.SetText("")
 	statusBar.SetDynamicColors(true)
 	statusBar.SetTextAlign(tview.AlignLeft)
 
@@ -66,7 +66,7 @@ func main() {
 	// Search input field.
 	searchInput := tview.NewInputField()
 	searchInput.SetLabel("Search: ")
-	searchInput.SetFieldWidth(0) // 0 to take the full available width
+	searchInput.SetFieldWidth(0)
 	searchInput.SetDoneFunc(func(key tcell.Key) {
 		app.SetFocus(list)
 	})
@@ -156,9 +156,8 @@ func main() {
 		}
 	}
 
-	// Launch goroutines to read from both stdin and stderr.
+	// Launch goroutine to read from logsPipe (stdin).
 	go readPipe(logsPipe)
-	go readPipe(os.Stderr)
 
 	// Capture 'q' or 'Q' key events to quit the application.
 	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -170,7 +169,6 @@ func main() {
 	})
 
 	if err := app.SetRoot(flex, true).Run(); err != nil {
-		// If the application cannot run, print the error.
 		os.Exit(1)
 	}
 }
